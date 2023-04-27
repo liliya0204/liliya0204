@@ -1,0 +1,137 @@
+using Microsoft.VisualBasic;
+using System;
+using System.Globalization;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+
+public class Article
+{
+    public string nmId { get; set; } //
+    public string feedbacksCount { get; set; } //
+    public int saleCount { get; set; } // 
+    public int totalCount { get; set; } //
+    public double finishedPrice { get; set; }
+    public string valuation { get; set; } //
+    public int countOnStock { get; set; }
+    public string price { get; set; }
+    public string discount { get; set; }  
+}
+public class Resp
+{
+    public string date { get; set; }
+    public string lastChangeDate { get; set; }
+    public string supplierArticle { get; set; }
+    public string techSize { get; set; }
+    public string barcode { get; set; }
+    public string totalPrice { get; set; }
+    public string discountPercent { get; set; }
+    public bool isSupply { get; set; }
+    public bool isRealization { get; set; }
+    public string promoCodeDiscount { get; set; }
+    public string warehouseName { get; set; }
+    public string countryName { get; set; }
+    public string oblastOkrugName { get; set; }
+    public string regionName { get; set; }
+    public string incomeID { get; set; }
+    public string saleID { get; set; }
+    public string odid { get; set; }
+    public string spp { get; set; }
+    public string forPay { get; set; }
+    public string finishedPrice { get; set; }
+    public string priceWithDisc { get; set; }
+    public string nmId { get; set; }
+    public string subject { get; set; }
+    public string category { get; set; }
+    public string brand { get; set; }
+    public string IsStorno { get; set; }
+    public string gNumber { get; set; }
+    public string sticker { get; set; }
+    public string srid { get; set; }
+}
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+
+
+        // создаем клиент
+        var client1 = new HttpClient();
+        var client2 = new HttpClient();
+
+        // добавляем в хедеры токен авторизации СТАТИСТИКА
+        client1.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("Bearer",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3NJRCI6ImY2YmJmYTQ3LWQwZjktNDk5Yy1iYzNjLWM5YzgxZDBkMzMzNCJ9.kADVzUpMhkS8dbQJcrn1p8ZM2YbnFHrSAolSlHIsp1U");
+
+        client2.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue("Bearer",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3NJRCI6ImQ5YTNmZmUwLWUyMjgtNDc0YS1iM2U1LTEzOGIzYjg4NGRhZSJ9.KjniAF9Dx3aal_riCQYHvsrzxyZgue0-oRR8jyDdmtc");
+
+        // URL, к которому будет отправлен GET-запрос
+        string url1 = "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20";
+        string url2 = "https://feedbacks-api.wildberries.ru/api/v1/feedbacks/products/rating/nmid?nmId=73434783";
+        string url3 = "https://suppliers-api.wildberries.ru/public/api/v1/info";
+        string salesUrl = "https://statistics-api.wildberries.ru/api/v1/supplier/sales?dateFrom=2019-06-20";
+
+        try
+        {
+            // выполняем GET-запрос и получаем ответ в виде строки
+            string response1 = await client1.GetStringAsync(url1);
+            string response2 = await client2.GetStringAsync(url2);
+            string response3 = await client2.GetStringAsync(url3);
+            string salesResponse = await client1.GetStringAsync(salesUrl);
+
+            List<Resp> Sales = JsonConvert.DeserializeObject<List<Resp>>(salesResponse);
+            List<Article> articles = JsonConvert.DeserializeObject<List<Article>>(response3);
+            foreach (Article obj in articles)
+            {
+                obj.finishedPrice = double.Parse(obj.price) - ((double.Parse(obj.price) - int.Parse(obj.discount)) * 0.01);
+                int countS = 0;
+                int totalS = 0;
+                string url = "https://feedbacks-api.wildberries.ru/api/v1/feedbacks/products/rating/nmid?nmId=" + obj.nmId;
+                string responseFeedback = await client2.GetStringAsync(url);
+                obj.valuation = Regex.Match(responseFeedback, @"""valuation"":""([\d\.]+)""").Groups[1].Value;
+                obj.feedbacksCount = Regex.Match(responseFeedback, @"""feedbacksCount"":(\d+)").Groups[1].Value;
+                foreach (Resp resp in Sales)
+                {
+                    if (resp.nmId == obj.nmId)
+                    {
+                        totalS++;
+                        if (resp.saleID[0] == 'S')
+                        {
+                            countS++;
+                        }
+                    }
+                }
+
+                obj.totalCount = totalS;
+                obj.saleCount = countS;
+            }
+
+            Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4,-15}", "nmid", "valuation", "salecount", "totalcount", "finishedprice");
+
+
+            foreach (Article obj in articles)
+            {
+                Console.WriteLine("{0,-15} {1,-15} {2,-15} {3,-15} {4,-15}",
+                    obj.nmId,
+                    obj.valuation,
+                    obj.saleCount,
+                    obj.totalCount,
+                    obj.finishedPrice
+                    );
+            }
+
+
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+    }
+}
